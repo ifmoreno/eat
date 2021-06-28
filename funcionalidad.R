@@ -77,3 +77,4 @@ datos_p <- datos %>%
 
 names(datos)
 
+

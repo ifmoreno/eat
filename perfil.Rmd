@@ -1,0 +1,153 @@
+---
+title: "Perfil EAT"
+author: "Iván Felipe Moreno"
+date: "Compilado `r format(Sys.time(), '%d %B, %Y')`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(vroom)
+library(sf)
+library(cowplot)
+library(viridis)
+
+consolidada_eat <- readxl::read_excel("C:/Users/ifmor/OneDrive - Universidad de los Andes/trabajo/DNP/Asociatividad/Producto/datos/eat/datos/eats.xlsx", sheet = 2) %>% filter(`Tipo EAT`=="Asociación de Municipios")
+
+codigos_entidades <- readRDS("C:/Users/ifmor/OneDrive - Universidad de los Andes/trabajo/DNP/Asociatividad/Producto/datos/eat/datos/codigos_entidades.rds")
+
+ i <- 29 # varios
+#i <- 1
+
+
+```
+
+## Ficha Caracterización
+
+### Identificación
+**Nombre:** `r consolidada_eat[i,2]`
+
+**Abreviatura:** `r consolidada_eat[i,4]` 
+
+**Tipo EAT:**`r consolidada_eat[i,3]`
+
+**Municipios:**`r consolidada_eat[i,14]` 
+
+**Códigos Dane:**`r consolidada_eat[i,15]`
+
+**Presuspuesto Anual:**`r consolidada_eat[i,12]`
+
+### Contacto
+**Representante legal:** `r consolidada_eat[i,9]`
+
+**Teléfono:**`r consolidada_eat[i,11]`
+
+**E-mail:**`r consolidada_eat[i,10]`
+
+**Dirección:**NA          
+
+**Página:**`r consolidada_eat[i,8]`
+
+## Ubicación
+```{r mapas, echo=FALSE}
+
+codigos <-  as.numeric(strsplit(consolidada_eat[i,15][[1]], ";")[[1]])
+deptos <- as.numeric(unique(codigos_entidades[codigos_entidades[,2] %in% codigos,1]))
+
+municipios <- read_sf("./mapas/MGN_MPIO_POLITICO.shp") %>% 
+  filter(DPTO_CCDGO %in% deptos) %>% 
+  mutate(MPIO_CDPMP= as.numeric(MPIO_CDPMP),
+         pertenece_eat= ifelse(MPIO_CDPMP %in% codigos,1,0))
+
+ggplot(data = municipios) +
+  ggtitle(municipios$DPTO_CNMBR) +
+  geom_sf(aes(fill=factor(pertenece_eat)),show.legend = FALSE)+
+  scale_fill_manual(values=c("#999999",  "#56B4E9"))+
+  theme_void()  
+
+```
+
+
+
+## Evolución de Variables
+
+
+```{r historia, echo=FALSE}
+
+econo <- vroom(file = "datos/TerriData_Dim12.txt", delim = "|", col_select = c(1,3,4,7,8,10,11), show_col_types = F,
+                col_names = T, locale = locale(decimal_mark = ",", encoding = "windows-1252")) %>% 
+  filter(`Código Entidad` %in% codigos)
+econo <- econo %>% 
+  filter(Indicador == "Valor agregado per cápita" | 
+           Indicador =="Valor agregado")
+
+finanzas <- vroom(file = "datos/fin_pub.txt", delim = "|", show_col_types = F,
+                col_names = T, locale = locale(decimal_mark = ",",encoding = "windows-1252")) %>% 
+  filter(`Código Entidad` %in% codigos)
+finanzas <- finanzas %>% 
+  filter(Indicador == "Salud" & Subcategoría =="SGP - Distribución asignaciones SGP por sectores" |
+           Indicador == "Educación" & Subcategoría =="SGP - Distribución asignaciones SGP por sectores")
+
+desemp_mun <- vroom(file = "datos/desem_mun.txt", delim = "|", show_col_types = F,
+                col_names = T, locale = locale(decimal_mark = ",",encoding = "windows-1252")) %>% 
+  filter(`Código Entidad` %in% codigos)
+desemp_mun <- desemp_mun %>% 
+  filter(Indicador=="Acceso a servicios públicos"|Indicador=="Seguridad"|
+           Indicador=="Educación"|
+           Indicador=="Salud"|
+           Indicador=="Ejecución de recursos")
+
+poblacion <- vroom(file = "datos/poblaci.txt", delim = "|", show_col_types = F,
+                col_names = T, locale = locale(decimal_mark = ",",encoding = "windows-1252")) %>% 
+  filter(`Código Entidad` %in% codigos)
+poblacion <- poblacion %>% 
+  filter(Indicador=="Puntaje SISBEN: Promedio - Total"| #gráfica evolución
+           Indicador=="Población total de hombres"| #tabla de caracterización
+           Indicador=="Población total de mujeres"|
+           Indicador=="Población urbana"|
+           Indicador=="Población rural"|
+           Indicador=="Población étnica total"|
+           Indicador=="Número de resguardos indígenas en el territorio"|
+           Indicador=="Proyección de número de venezolanos")
+
+econo %>%
+  filter(Indicador == "Valor agregado per cápita") %>% 
+  ggplot(aes(x=Año, y=`Dato Numérico`, group=Entidad, color=Entidad)) +
+    geom_line(aes(linetype=Entidad))+
+    ggtitle("Valor agregado per cápita")+ 
+   #scale_color_viridis(discrete = TRUE)+
+  theme(legend.position = "none")
+
+
+lista_fin <- c("Salud","Educación")
+for (i in 1:length(lista_fin)) {
+  print(finanzas %>%
+  filter(Indicador == lista_fin[i]) %>% 
+  ggplot(aes(x=Año, y=`Dato Numérico`, group=Entidad, color=Entidad)) +
+    geom_line(aes(linetype=Entidad))+
+    ggtitle(lista_fin[i])
+  )
+}
+
+lista_med <- c("Acceso a servicios públicos",
+"Seguridad","Educación","Salud","Ejecución de recursos")
+for (i in 1:length(lista_med)) {
+  print(desemp_mun %>%
+  filter(Indicador == lista_med[i]) %>% 
+  ggplot(aes(x=Año, y=`Dato Numérico`, group=Entidad, color=Entidad)) +
+    geom_line(aes(linetype=Entidad))+
+    ggtitle(lista_med[i])
+  )
+}
+
+
+
+
+```
+
+
+
+
+
+
